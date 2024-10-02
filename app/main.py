@@ -19,7 +19,7 @@ from app.api.errors.http_error import (
 
 
 def get_application() -> FastAPI:
-    origins = ["http://localhost", "https://localhost", "https://www.morphingstar.com"]
+    origins = ["http://localhost", "https://localhost", "https://www.kpopmentor.com"]
 
     settings = get_app_settings()
     logger.init(settings)
