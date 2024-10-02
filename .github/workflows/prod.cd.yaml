@@ -1,0 +1,92 @@
+name: (PROD) Continuous Delivery
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+    paths:
+      - "**"
+  workflow_dispatch:
+
+env:
+  ENV: prod
+  LATEST_TAG: latest
+
+jobs:
+  Build-and-Deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
+      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+
+      - run: echo "🏃‍♂️ Cloning Repository to the Runner..."
+      - name: Check out repository code # Clone to the runner
+        uses: actions/checkout@v3
+      - run: echo "✅ Done!"
+
+      - run: echo "🏃‍♂️ Installing and Setting Tools for the Deployment..."
+      - name: Load Constants ENV for Workflow
+        uses: cardinalby/export-env-action@v1
+        with:
+          envFile: ".github/variables/constants.env"
+          expand: "true"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: v0.12.1
+      - run: echo "✅ Done!"
+      - run: echo "🏃‍♂️ Injecting Credentials for the Deployment..."
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+      - run: echo "✅ Done!"
+
+      - run: echo "🐳 Docker build & Push Docker image to Amazon ECR..."
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Docker Build and Push to Amazon ECR
+        uses: docker/build-push-action@v2
+        env:
+          ECR: ${{ steps.login-ecr.outputs.registry }}
+          TAG: ${{ github.ref_name }}
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.ECR }}/${{ env.ECR_REPOSITORY }}:${{ env.TAG }}
+            ${{ env.ECR }}/${{ env.ECR_REPOSITORY }}:${{ env.LATEST_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Download Task Definition Template
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+            --query taskDefinition \
+            > task-definition.json
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: render-web-container
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        env:
+          ECR: ${{ steps.login-ecr.outputs.registry }}
+          TAG: ${{ github.ref_name }}
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.ECS_SERVICE_CONTAINER_NAME }}
+          image: ${{ env.ECR }}/${{ env.ECR_REPOSITORY }}:${{ env.TAG }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-web-container.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE_NAME }}
+          cluster: ${{ env.ECS_CLUSTER_NAME }}
+          wait-for-service-stability: true
+
+      - run: echo "✅ Done!"
