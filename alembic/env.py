@@ -37,7 +37,7 @@ from app.core.config import get_app_settings
 class Settings:
     database_url: str = os.getenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://postgres:Bamiedu11!!@kpop-db-prod.cp02cmo2g8fv.ap-northeast-2.rds.amazonaws.com:5432/postgres",
+        None,
     )
 
 
