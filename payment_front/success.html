@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8">
+    <title>결제 성공</title>
+  </head>
+  <body>
+    <h1>결제 성공</h1>
+    <p>결제가 성공적으로 이루어졌습니다. 데이터를 처리 중입니다...</p>
+
+    <script>
+      // URL 쿼리 파라미터에서 orderId, paymentKey, amount를 추출
+      const urlParams = new URLSearchParams(window.location.search);
+      const orderId = urlParams.get('orderId');
+      const paymentKey = urlParams.get('paymentKey');
+      const amount = urlParams.get('amount');
+
+      // 8000번 포트의 백엔드 서버로 POST 요청 보내기
+      fetch("http://localhost:8000/payments/complete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          orderId: orderId,
+          paymentKey: paymentKey,
+          amount: amount
+        })
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('결제 처리 중 문제가 발생했습니다.');
+        }
+        return response.json();
+      })
+      .then(data => {
+        console.log('결제가 성공적으로 처리되었습니다:', data);
+      })
+      .catch(error => {
+        console.error('Error:', error);
+      });
+    </script>
+  </body>
+</html>

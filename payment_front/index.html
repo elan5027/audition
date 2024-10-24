@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <title>결제하기</title>
+    <meta charset="utf-8" />
+    <!-- 토스페이먼츠 결제창 SDK 추가 -->
+    <script src="https://js.tosspayments.com/v1/payment"></script>
+  </head>
+  <body>
+    <h1>토스 해외간편결제</h1>
+    
+    <!-- 결제 버튼 -->
+    <button id="payButton">결제하기</button>
+
+    <script>
+      // ------ 클라이언트 키로 객체 초기화 ------
+      var clientKey = "test_ck_Ba5PzR0ArnyQLDJKGGvGVvmYnNeD";
+      var tossPayments = TossPayments(clientKey); // 클라이언트 키로 초기화하기
+
+      // 결제 버튼 클릭 시 결제창 띄우기
+      document.getElementById("payButton").addEventListener("click", function() {
+        tossPayments
+          .requestPayment("해외간편결제", {
+            // 결제 수단 파라미터
+            // 결제 정보 파라미터
+            amount: 100,
+            orderId: "audition-5bd59775547e9c58",
+            orderName: "string",
+            customerName: "testUser",
+            successUrl: "http://localhost:8080/success",
+            failUrl: "http://localhost:8080/fail",
+            provider: "PAYPAL",
+            currency: "USD", // USD 통화 지원
+            country: "US", // ISO-3166의 두 자리 국가 코드 모두 지원ㄴ
+            // 판매자 보호 및 위험 관리 파라미터 사용 예시
+            paymentMethodOptions: {
+              // PayPal에서 요구하는 추가 파라미터
+              paypal: {
+                setTransactionContext: {
+                  // PayPal STC 파라미터 예시 (구매자의 로그인 정보)
+                  sender_account_id: "kimToss01",
+                  sender_first_name: "Toss",
+                  sender_last_name: "Kim",
+                  sender_email: "toss@sample.com",
+                  sender_phone: "(1) 123 456 7890",
+                  sender_country_code: "US",
+                  sender_create_date: "2021-01-01T19:14:55.277-0:00",
+                },
+              },
+            },
+          })
+          .catch(function (error) {
+            if (error.code === "USER_CANCEL") {
+              // 결제 고객이 결제창을 닫았을 때 에러 처리
+              alert("결제를 취소하셨습니다.");
+            } else if (error.code === "INVALID_CARD_COMPANY") {
+              // 유효하지 않은 카드 코드에 대한 에러 처리
+              alert("유효하지 않은 카드입니다.");
+            } else {
+              alert("결제 중 오류가 발생했습니다.");
+            }
+          });
+      });
+    </script>
+  </body>
+</html>
