@@ -11,52 +11,57 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Install Required Tools
+      - name: Build WeasyPrint Layer in Amazon Linux 2
         run: |
-          sudo apt-get update
-          sudo apt-get install -y rpm zip python3-pip
+          docker run --rm -v "$(pwd):/workspace" -w /workspace amazonlinux:2 bash -c "
+            set -e
 
-      - name: Build WeasyPrint Layer
-        run: |
-          set -e
+            # Install required tools
+            yum install -y yum-utils zip python3-pip
 
-          # Create directories
-          mkdir -p /tmp/layer/lib /tmp/layer/python
+            # Create directories
+            mkdir -p /workspace/tmp/layer/lib /workspace/tmp/layer/python
 
-          # Download and extract required dependencies
-          cd /tmp
-          sudo apt-get download libcairo2-dev libgdk-pixbuf2.0-dev libffi-dev libpango1.0-dev \
-            libexpat1-dev libmount-dev uuid-dev libblkid-dev libglib2.0-dev libthai-dev \
-            libfribidi-dev libharfbuzz-dev libdatrie-dev libfreetype-dev libgraphite2-dev \
-            libbrotli-dev libpng-dev libfontconfig1-dev shared-mime-info || {
-              echo "Error downloading one or more dependencies.";
-              exit 1;
-          }
+            # Download and extract required dependencies
+            cd /workspace/tmp
+            yumdownloader --resolve cairo gdk-pixbuf2 libffi pango expat libmount \
+              libuuid libblkid glib2 libthai fribidi harfbuzz libdatrie freetype \
+              graphite2 libbrotli libpng fontconfig shared-mime-info
 
-          mkdir -p /tmp/deps
-          find . -type f -name "*.deb" -exec dpkg-deb -x {} /tmp/deps \;
-          cp -r /tmp/deps/usr/lib/x86_64-linux-gnu/* /tmp/layer/lib
+            mkdir -p /workspace/tmp/deps
+            for rpm in *.rpm; do
+              rpm2cpio "$rpm" | cpio -idm -D /workspace/tmp/deps
+            done
 
-          # Standardize library symlinks
-          for f in $(find /tmp/layer/lib -type f -name 'lib*.so*'); do
-            ln -sf $(basename $f) /tmp/layer/lib/$(basename $f | sed 's/\\.so\\.\\d*/.so/');
-          done
+            cp -r /workspace/tmp/deps/usr/lib64/* /workspace/tmp/layer/lib || echo \"No libraries found to copy.\"
 
-          # Generate GDK Pixbuf loaders cache
-          GDK_PIXBUF_MODULEDIR=$(find /tmp/layer/lib -name loaders | head -n 1)
-          export GDK_PIXBUF_MODULEDIR
-          GDK_PIXBUF_QUERY=$(find /tmp/deps/usr/bin -name gdk-pixbuf-query-loaders | head -n 1)
-          $GDK_PIXBUF_QUERY > /tmp/layer/lib/loaders.cache
+            # Standardize library symlinks
+            for f in $(find /workspace/tmp/layer/lib -type f -name 'lib*.so*'); do
+              ln -sf $(basename $f) /workspace/tmp/layer/lib/$(basename $f | sed 's/\.so\.\d*/.so/');
+            done
 
-          # Install WeasyPrint
-          python3 -m pip install --no-cache-dir weasyprint -t /tmp/layer/python
+            # Generate GDK Pixbuf loaders cache
+            GDK_PIXBUF_MODULEDIR=$(find /workspace/tmp/layer/lib -name loaders | head -n 1)
+            if [ -n \"$GDK_PIXBUF_MODULEDIR\" ]; then
+              export GDK_PIXBUF_MODULEDIR
+              GDK_PIXBUF_QUERY=$(find /workspace/tmp/deps/usr/bin -name gdk-pixbuf-query-loaders | head -n 1)
+              if [ -n \"$GDK_PIXBUF_QUERY\" ]; then
+                $GDK_PIXBUF_QUERY > /workspace/tmp/layer/lib/loaders.cache
+              else
+                echo \"Warning: gdk-pixbuf-query-loaders not found.\"
+              fi
+            else
+              echo \"Warning: GDK_PIXBUF_MODULEDIR not found.\"
+            fi
 
-          # Clean up unnecessary files
-          find /tmp/layer/python -type d -name "tests" -exec rm -rf {} +
-          find /tmp/layer/python -type d -name "*.dist-info" -exec rm -rf {} +
+            # Install WeasyPrint
+            python3 -m pip install --no-cache-dir weasyprint -t /workspace/tmp/layer/python
 
-          # Package the layer
-          cd /tmp/layer
-          zip -r9 /tmp/weasyprint_layer.zip lib python
+            # Clean up unnecessary files
+            find /workspace/tmp/layer/python -type d -name \"tests\" -exec rm -rf {} +
+            find /workspace/tmp/layer/python -type d -name \"*.dist-info\" -exec rm -rf {} +
 
-
+            # Package the layer
+            cd /workspace/tmp/layer
+            zip -r9 /workspace/tmp/weasyprint_layer.zip lib python
+          "
