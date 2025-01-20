@@ -17,43 +17,53 @@ jobs:
             set -e
 
             # Install required tools
-            yum install -y yum-utils zip python3-pip
+            yum install -y yum-utils zip python3-pip rpmdevtools
 
             # Create directories
             mkdir -p /workspace/tmp/layer/lib /workspace/tmp/layer/python
 
-            # Install dependencies
-            yum install -y cairo gdk-pixbuf2 libffi pango expat libmount \
+            # Download and extract required dependencies
+            cd /workspace/tmp
+            yumdownloader --resolve cairo gdk-pixbuf2 libffi pango expat libmount \
               libuuid libblkid glib2 libthai fribidi harfbuzz libdatrie freetype \
               graphite2 libbrotli libpng fontconfig shared-mime-info
 
-            cp -r /usr/lib64/* /workspace/tmp/layer/lib || echo \"No libraries found to copy.\"
+            mkdir -p /workspace/tmp/deps
+            for rpm in *.rpm; do
+              if rpm -qip "$rpm" >/dev/null 2>&1; then
+                rpm2cpio "$rpm" | cpio -idm -D /workspace/tmp/deps
+              else
+                echo "Warning: Invalid RPM file: $rpm"
+              fi
+            done
+
+            cp -r /workspace/tmp/deps/usr/lib64/* /workspace/tmp/layer/lib || echo "No libraries found to copy."
 
             # Standardize library symlinks
-            for f in $(find /workspace/tmp/layer/lib -type f -name 'lib*.so*'); do
-              ln -sf $(basename $f) /workspace/tmp/layer/lib/$(basename $f | sed 's/\\.so\\.\\d*/.so/');
+            for f in $(find /workspace/tmp/layer/lib -type f -name 'lib*.so*' 2>/dev/null); do
+              ln -sf $(basename $f) /workspace/tmp/layer/lib/$(basename $f | sed 's/\.so\.\d*/.so/');
             done
 
             # Generate GDK Pixbuf loaders cache
-            GDK_PIXBUF_MODULEDIR=$(find /workspace/tmp/layer/lib -name loaders | head -n 1)
-            if [ -n \"$GDK_PIXBUF_MODULEDIR\" ]; then
+            GDK_PIXBUF_MODULEDIR=$(find /workspace/tmp/layer/lib -name loaders 2>/dev/null | head -n 1)
+            if [ -n "$GDK_PIXBUF_MODULEDIR" ]; then
               export GDK_PIXBUF_MODULEDIR
-              GDK_PIXBUF_QUERY=$(find /usr/bin -name gdk-pixbuf-query-loaders | head -n 1)
-              if [ -n \"$GDK_PIXBUF_QUERY\" ]; then
+              GDK_PIXBUF_QUERY=$(find /workspace/tmp/deps/usr/bin -name gdk-pixbuf-query-loaders 2>/dev/null | head -n 1)
+              if [ -n "$GDK_PIXBUF_QUERY" ]; then
                 $GDK_PIXBUF_QUERY > /workspace/tmp/layer/lib/loaders.cache
               else
-                echo \"Warning: gdk-pixbuf-query-loaders not found.\"
+                echo "Warning: gdk-pixbuf-query-loaders not found."
               fi
             else
-              echo \"Warning: GDK_PIXBUF_MODULEDIR not found.\"
+              echo "Warning: GDK_PIXBUF_MODULEDIR not found."
             fi
 
             # Install WeasyPrint
             python3 -m pip install --no-cache-dir weasyprint -t /workspace/tmp/layer/python
 
             # Clean up unnecessary files
-            find /workspace/tmp/layer/python -type d -name \"tests\" -exec rm -rf {} +
-            find /workspace/tmp/layer/python -type d -name \"*.dist-info\" -exec rm -rf {} +
+            find /workspace/tmp/layer/python -type d -name "tests" -exec rm -rf {} +
+            find /workspace/tmp/layer/python -type d -name "*.dist-info" -exec rm -rf {} +
 
             # Package the layer
             cd /workspace/tmp/layer
