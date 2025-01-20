@@ -4,68 +4,37 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-weasyprint-layer:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Build WeasyPrint Layer in Amazon Linux 2
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
         run: |
-          docker pull amazonlinux:2 && docker run --rm -v "$(pwd):/workspace" -w /workspace amazonlinux:2 bash -c "
-            set -e
+          sudo apt-get update && sudo apt-get install -y \
+          python3-dev python3-pip rpm python3-rpm python3-venv
 
-            # Install required tools
-            yum install -y yum-utils zip python3-pip rpmdevtools || { echo 'Failed to install tools'; exit 1; }
+      - name: Install AWS CLI
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install
 
-            # Create directories
-            mkdir -p /workspace/tmp/layer/lib /workspace/tmp/layer/python
+      - name: Prepare build environment
+        run: |
+          mkdir -p layer/out
+          chmod +x ./build-layer.sh
 
-            # Download and extract required dependencies
-            cd /workspace/tmp
-            yumdownloader --resolve cairo gdk-pixbuf2 libffi pango expat libmount \
-              libuuid libblkid glib2 libthai fribidi harfbuzz freetype graphite2 \
-              libpng fontconfig shared-mime-info || { echo 'Failed to download dependencies'; exit 1; }
-
-            mkdir -p /workspace/tmp/deps
-            for rpm in *.rpm; do
-              if rpm -qip "$rpm" >/dev/null 2>&1; then
-                rpm2cpio "$rpm" | cpio -idm -D /workspace/tmp/deps || echo "Failed to extract: $rpm"
-              else
-                echo "Warning: Invalid RPM file: $rpm"
-              fi
-            done
-
-            cp -r /workspace/tmp/deps/usr/lib64/* /workspace/tmp/layer/lib || echo "No libraries found to copy."
-
-            # Standardize library symlinks
-            find /workspace/tmp/layer/lib -type f -name 'lib*.so*' 2>/dev/null | while read -r f; do
-              ln -sf $(basename "$f") /workspace/tmp/layer/lib/$(basename "$f" | sed 's/\.so\.\d*/.so/') || echo "Failed to create symlink for $f"
-            done
-
-            # Generate GDK Pixbuf loaders cache
-            GDK_PIXBUF_MODULEDIR=$(find /workspace/tmp/layer/lib -name loaders 2>/dev/null | head -n 1)
-            if [ -n "$GDK_PIXBUF_MODULEDIR" ]; then
-              export GDK_PIXBUF_MODULEDIR
-              GDK_PIXBUF_QUERY=$(find /workspace/tmp/deps/usr/bin -name gdk-pixbuf-query-loaders 2>/dev/null | head -n 1)
-              if [ -n "$GDK_PIXBUF_QUERY" ]; then
-                $GDK_PIXBUF_QUERY > /workspace/tmp/layer/lib/loaders.cache || echo "Failed to generate GDK Pixbuf loaders cache"
-              else
-                echo "Warning: gdk-pixbuf-query-loaders not found."
-              fi
-            else
-              echo "Warning: GDK_PIXBUF_MODULEDIR not found."
-            fi
-
-            # Install WeasyPrint
-            python3 -m pip install --no-cache-dir weasyprint -t /workspace/tmp/layer/python || { echo 'Failed to install WeasyPrint'; exit 1; }
-
-            # Clean up unnecessary files
-            find /workspace/tmp/layer/python -type d -name "tests" -exec rm -rf {} +
-            find /workspace/tmp/layer/python -type d -name "*.dist-info" -exec rm -rf {} +
-
-            # Package the layer
-            cd /workspace/tmp/layer
-            zip -r9 /workspace/tmp/weasyprint_layer.zip lib python || { echo 'Failed to create zip file'; exit 1; }
-          "
+      - name: Execute build script
+        run: |
+          ./build-layer.sh
+        env:
+          AWS_EXECUTION_ENV: "AWS_Lambda_python3.11"
+          LAMBDA_RUNTIME_DIR: "/var/task"
