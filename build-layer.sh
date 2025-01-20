@@ -2,23 +2,24 @@
 set -e
 
 # Install required tools
-dnf install -y rpmdevtools
+yum install -y rpmdevtools python3 python3-pip zip
 
 # Create working directory
 cd /tmp
 
-# Download required packages
-dnf download cairo gdk-pixbuf2 libffi pango expat libmount libuuid libblkid glib2 libthai fribidi harfbuzz libdatrie freetype graphite2 libbrotli libpng fontconfig shared-mime-info
+# Download required packages using yumdownloader
+yum install -y yum-utils
+yumdownloader cairo gdk-pixbuf2 libffi pango expat libmount libuuid libblkid glib2 libthai fribidi harfbuzz libdatrie freetype graphite2 libbrotli libpng fontconfig shared-mime-info
 
 # Extract RPM files
-rpmdev-extract -- *rpm
+rpmdev-extract -- *.rpm
 
 # Create target directory
 mkdir -p /opt/lib
 
 # Copy necessary libraries
 cp -P -r /tmp/*/usr/lib64/* /opt/lib
-for f in $(find /tmp  -type f  -name 'lib*.so*'); do 
+for f in $(find /tmp -type f -name 'lib*.so*'); do
   cp "$f" /opt/lib/$(python3 -c "import re; print(re.match(r'^(.*.so.\\d+).*$', '$(basename $f)').groups()[0])")
 done
 
@@ -36,3 +37,4 @@ python3 -m pip install "weasyprint" -t "/opt/python/lib/$RUNTIME/site-packages"
 # Create ZIP archive
 cd /opt
 zip -r9 /out/layer.zip lib/* python/*
+
