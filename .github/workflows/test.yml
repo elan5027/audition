@@ -22,29 +22,23 @@ jobs:
             # Create directories
             mkdir -p /workspace/tmp/layer/lib /workspace/tmp/layer/python
 
-            # Download and extract required dependencies
-            cd /workspace/tmp
-            yumdownloader --resolve cairo gdk-pixbuf2 libffi pango expat libmount \
+            # Install dependencies
+            yum install -y cairo gdk-pixbuf2 libffi pango expat libmount \
               libuuid libblkid glib2 libthai fribidi harfbuzz libdatrie freetype \
               graphite2 libbrotli libpng fontconfig shared-mime-info
 
-            mkdir -p /workspace/tmp/deps
-            for rpm in *.rpm; do
-              rpm2cpio "$rpm" | cpio -idm -D /workspace/tmp/deps
-            done
-
-            cp -r /workspace/tmp/deps/usr/lib64/* /workspace/tmp/layer/lib || echo \"No libraries found to copy.\"
+            cp -r /usr/lib64/* /workspace/tmp/layer/lib || echo \"No libraries found to copy.\"
 
             # Standardize library symlinks
             for f in $(find /workspace/tmp/layer/lib -type f -name 'lib*.so*'); do
-              ln -sf $(basename $f) /workspace/tmp/layer/lib/$(basename $f | sed 's/\.so\.\d*/.so/');
+              ln -sf $(basename $f) /workspace/tmp/layer/lib/$(basename $f | sed 's/\\.so\\.\\d*/.so/');
             done
 
             # Generate GDK Pixbuf loaders cache
             GDK_PIXBUF_MODULEDIR=$(find /workspace/tmp/layer/lib -name loaders | head -n 1)
             if [ -n \"$GDK_PIXBUF_MODULEDIR\" ]; then
               export GDK_PIXBUF_MODULEDIR
-              GDK_PIXBUF_QUERY=$(find /workspace/tmp/deps/usr/bin -name gdk-pixbuf-query-loaders | head -n 1)
+              GDK_PIXBUF_QUERY=$(find /usr/bin -name gdk-pixbuf-query-loaders | head -n 1)
               if [ -n \"$GDK_PIXBUF_QUERY\" ]; then
                 $GDK_PIXBUF_QUERY > /workspace/tmp/layer/lib/loaders.cache
               else
