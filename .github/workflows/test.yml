@@ -1,0 +1,42 @@
+name: deploy_weasyprint
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-weasyprint-layer:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+ - name: Install Required Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libffi-dev libpango1.0-dev libcairo2-dev libgdk-pixbuf2.0-dev libglib2.0-dev libfreetype6-dev libfontconfig1-dev python3-pip zip
+
+      - name: Build WeasyPrint Layer
+        run: |
+          # Create directories
+          mkdir -p /tmp/layer/lib /tmp/layer/python
+
+          # Copy required libraries to /tmp/layer/lib
+          cp -P /usr/lib/x86_64-linux-gnu/libffi.so.6 /tmp/layer/lib
+          cp -P /usr/lib/x86_64-linux-gnu/libcairo.so.2 /tmp/layer/lib
+          cp -P /usr/lib/x86_64-linux-gnu/libpango-1.0.so.0 /tmp/layer/lib
+          cp -P /usr/lib/x86_64-linux-gnu/libpangocairo-1.0.so.0 /tmp/layer/lib
+          cp -P /usr/lib/x86_64-linux-gnu/libgdk_pixbuf-2.0.so.0 /tmp/layer/lib
+          cp -P /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 /tmp/layer/lib
+          cp -P /usr/lib/x86_64-linux-gnu/libfreetype.so.6 /tmp/layer/lib
+          cp -P /usr/lib/x86_64-linux-gnu/libfontconfig.so.1 /tmp/layer/lib
+
+          # Install WeasyPrint
+          python3 -m pip install --no-cache-dir weasyprint -t /tmp/layer/python
+
+          # Clean up unnecessary files
+          find /tmp/layer/python -type d -name "tests" -exec rm -rf {} +
+          find /tmp/layer/python -type d -name "*.dist-info" -exec rm -rf {} +
+
+          # Package the layer
+          cd /tmp/layer
+          zip -r /tmp/weasyprint_layer.zip .
