@@ -10,32 +10,47 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+
+      - name: AWS 자격 증명 구성
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
       - name: Install Required Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y libffi-dev libpango1.0-dev libcairo2-dev libgdk-pixbuf2.0-dev libglib2.0-dev libfreetype6-dev libfontconfig1-dev python3-pip zip
+          sudo apt-get install -y rpm zip python3-pip
 
       - name: Build WeasyPrint Layer
         run: |
+          set -e
+
           # Create directories
           mkdir -p /tmp/layer/lib /tmp/layer/python
 
-          # Copy required libraries to /tmp/layer/lib
-          cp -P /usr/lib/x86_64-linux-gnu/libcairo.so.2 /tmp/layer/lib
-          cp -P /usr/lib/x86_64-linux-gnu/libpango-1.0.so.0 /tmp/layer/lib
-          cp -P /usr/lib/x86_64-linux-gnu/libpangocairo-1.0.so.0 /tmp/layer/lib
-          cp -P /usr/lib/x86_64-linux-gnu/libgdk_pixbuf-2.0.so.0 /tmp/layer/lib
-          cp -P /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 /tmp/layer/lib
-          cp -P /usr/lib/x86_64-linux-gnu/libfreetype.so.6 /tmp/layer/lib
-          cp -P /usr/lib/x86_64-linux-gnu/libfontconfig.so.1 /tmp/layer/lib
+          # Download and extract required dependencies
+          cd /tmp
+          sudo apt-get download libcairo2-dev libgdk-pixbuf2.0-dev libffi-dev libpango1.0-dev \
+            libexpat1-dev libmount-dev uuid-dev libblkid-dev libglib2.0-dev libthai-dev \
+            libfribidi-dev libharfbuzz-dev libdatrie-dev libfreetype6-dev libgraphite2-dev \
+            libbrotli-dev libpng-dev libfontconfig1-dev shared-mime-info
 
-          # Dynamically locate and copy libffi
-          LIBFFI_PATH=$(find /usr/lib/x86_64-linux-gnu -name "libffi.so*" | head -n 1)
-          if [ -z "$LIBFFI_PATH" ]; then
-            echo "Error: libffi not found."
-            exit 1
-          fi
-          cp -P "$LIBFFI_PATH" /tmp/layer/lib
+          mkdir -p /tmp/deps
+          find . -type f -name "*.deb" -exec dpkg-deb -x {} /tmp/deps \;
+          cp -r /tmp/deps/usr/lib/x86_64-linux-gnu/* /tmp/layer/lib
+
+          # Standardize library symlinks
+          for f in $(find /tmp/layer/lib -type f -name 'lib*.so*'); do
+            ln -sf $(basename $f) /tmp/layer/lib/$(basename $f | sed 's/\.so\.\d*/.so/');
+          done
+
+          # Generate GDK Pixbuf loaders cache
+          GDK_PIXBUF_MODULEDIR=$(find /tmp/layer/lib -name loaders | head -n 1)
+          export GDK_PIXBUF_MODULEDIR
+          GDK_PIXBUF_QUERY=$(find /tmp/deps/usr/bin -name gdk-pixbuf-query-loaders | head -n 1)
+          $GDK_PIXBUF_QUERY > /tmp/layer/lib/loaders.cache
 
           # Install WeasyPrint
           python3 -m pip install --no-cache-dir weasyprint -t /tmp/layer/python
@@ -46,5 +61,5 @@ jobs:
 
           # Package the layer
           cd /tmp/layer
-          zip -r /tmp/weasyprint_layer.zip .
+          zip -r9 /tmp/weasyprint_layer.zip lib python
 
