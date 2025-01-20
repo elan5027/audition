@@ -27,8 +27,11 @@ jobs:
           cd /tmp
           sudo apt-get download libcairo2-dev libgdk-pixbuf2.0-dev libffi-dev libpango1.0-dev \
             libexpat1-dev libmount-dev uuid-dev libblkid-dev libglib2.0-dev libthai-dev \
-            libfribidi-dev libharfbuzz-dev libdatrie-dev libfreetype6-dev libgraphite2-dev \
-            libbrotli-dev libpng-dev libfontconfig1-dev shared-mime-info
+            libfribidi-dev libharfbuzz-dev libdatrie-dev libfreetype-dev libgraphite2-dev \
+            libbrotli-dev libpng-dev libfontconfig1-dev shared-mime-info || {
+              echo "Error downloading one or more dependencies.";
+              exit 1;
+          }
 
           mkdir -p /tmp/deps
           find . -type f -name "*.deb" -exec dpkg-deb -x {} /tmp/deps \;
@@ -36,7 +39,7 @@ jobs:
 
           # Standardize library symlinks
           for f in $(find /tmp/layer/lib -type f -name 'lib*.so*'); do
-            ln -sf $(basename $f) /tmp/layer/lib/$(basename $f | sed 's/\.so\.\d*/.so/');
+            ln -sf $(basename $f) /tmp/layer/lib/$(basename $f | sed 's/\\.so\\.\\d*/.so/');
           done
 
           # Generate GDK Pixbuf loaders cache
@@ -55,4 +58,5 @@ jobs:
           # Package the layer
           cd /tmp/layer
           zip -r9 /tmp/weasyprint_layer.zip lib python
+
 
