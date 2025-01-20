@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
- - name: Install Required Tools
+      - name: Install Required Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y libffi-dev libpango1.0-dev libcairo2-dev libgdk-pixbuf2.0-dev libglib2.0-dev libfreetype6-dev libfontconfig1-dev python3-pip zip
