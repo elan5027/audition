@@ -19,6 +19,7 @@ jobs:
         run: |
           docker run --rm -v "$(pwd)":/lambda-layer amazonlinux:2 /bin/bash -c "
           set -e
+          yum update -y
           yum install -y rpmdevtools python3 python3-pip zip
           mkdir -p /lambda-layer/build
           cd /lambda-layer
