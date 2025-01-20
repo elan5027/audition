@@ -8,7 +8,7 @@ yum install -y rpmdevtools python3 python3-pip zip yum-utils
 cd /tmp
 
 # Download only required packages using yumdownloader
-yumdownloader --resolve cairo gdk-pixbuf2 libffi pango expat \
+yumdownloader --resolve cairo gtk3 gdk-pixbuf2 libffi pango expat \
   glib2 shared-mime-info fontconfig libpng freetype
 
 # Extract RPM files
