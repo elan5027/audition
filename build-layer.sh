@@ -2,14 +2,14 @@
 set -e
 
 # Install required tools
-yum install -y rpmdevtools python3 python3-pip zip
+yum install -y rpmdevtools python3 python3-pip zip yum-utils
 
 # Create working directory
 cd /tmp
 
-# Download required packages using yumdownloader
-yum install -y yum-utils
-yumdownloader cairo gdk-pixbuf2 libffi pango expat libmount libuuid libblkid glib2 libthai fribidi harfbuzz libdatrie freetype graphite2 libbrotli libpng fontconfig shared-mime-info
+# Download only required packages using yumdownloader
+yumdownloader --resolve cairo gdk-pixbuf2 libffi pango expat \
+  glib2 shared-mime-info fontconfig libpng freetype
 
 # Extract RPM files
 rpmdev-extract -- *.rpm
@@ -17,22 +17,35 @@ rpmdev-extract -- *.rpm
 # Create target directory
 mkdir -p /opt/lib
 
-# Copy necessary libraries
-cp -P -r /tmp/*/usr/lib64/* /opt/lib
-for f in $(find /tmp -type f -name 'lib*.so*'); do
-  cp "$f" /opt/lib/$(python3 -c "import re; print(re.match(r'^(.*.so.\\d+).*$', '$(basename $f)').groups()[0])")
-done
+# Copy only necessary libraries
+find /tmp -type f -name 'lib*.so*' -exec cp -P {} /opt/lib/ \;
 
 # Generate loaders cache for gdk-pixbuf
-PIXBUF_BIN=$(find /tmp -name gdk-pixbuf-query-loaders-64)
-GDK_PIXBUF_MODULEDIR=$(find /opt/lib/gdk-pixbuf-2.0/ -name loaders)
+PIXBUF_BIN=$(find /tmp -name gdk-pixbuf-query-loaders-64 | head -n 1)
+if [[ -z "$PIXBUF_BIN" ]]; then
+  echo "Error: gdk-pixbuf-query-loaders-64 not found."
+  exit 1
+fi
+
+GDK_PIXBUF_MODULEDIR=$(find /opt/lib/gdk-pixbuf-2.0/ -name loaders | head -n 1)
+if [[ -z "$GDK_PIXBUF_MODULEDIR" ]]; then
+  echo "Error: GDK_PIXBUF_MODULEDIR not found."
+  exit 1
+fi
+
 export GDK_PIXBUF_MODULEDIR
 $PIXBUF_BIN > /opt/lib/loaders.cache
 
-# Install Python dependencies
+# Install Python dependencies and strip unneeded files
 RUNTIME=$(grep AWS_EXECUTION_ENV "$LAMBDA_RUNTIME_DIR/bootstrap" | cut -d _ -f 5)
-mkdir -p "/opt/python/lib/$RUNTIME/site-packages"
-python3 -m pip install "weasyprint" -t "/opt/python/lib/$RUNTIME/site-packages"
+PYTHON_LIB="/opt/python/lib/$RUNTIME/site-packages"
+mkdir -p "$PYTHON_LIB"
+python3 -m pip install "weasyprint" --no-cache-dir -t "$PYTHON_LIB"
+
+# Remove unneeded files to reduce size
+find "$PYTHON_LIB" -name "*.pyc" -delete
+find "$PYTHON_LIB" -type d -name "__pycache__" -exec rm -rf {} +
+strip --strip-unneeded /opt/lib/* || echo "No files to strip."
 
 # Create ZIP archive
 cd /opt
